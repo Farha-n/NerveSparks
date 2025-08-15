@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:6.0
+    container_name: document_rag_mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+      MONGO_INITDB_DATABASE: document_rag_db
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - rag_network
+
+  backend:
+    build: .
+    container_name: document_rag_backend
+    restart: unless-stopped
+    environment:
+      - MONGO_URL=mongodb://admin:password@mongodb:27017
+      - DB_NAME=document_rag_db
+      - HF_TOKEN=${HF_TOKEN:-}
+      - CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+      - HOST=0.0.0.0
+      - PORT=8000
+    ports:
+      - "8000:8000"
+    depends_on:
+      - mongodb
+    networks:
+      - rag_network
+    volumes:
+      - ./backend:/app
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: document_rag_frontend
+    restart: unless-stopped
+    environment:
+      - REACT_APP_BACKEND_URL=http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - rag_network
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+
+volumes:
+  mongodb_data:
+
+networks:
+  rag_network:
+    driver: bridge
+
